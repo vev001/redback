@@ -121,8 +121,8 @@ protected:
   virtual void returnMapDP(const RankTwoTensor &, const RankTwoTensor &, const RankFourTensor &, RankTwoTensor &, RankTwoTensor &, Real &, Real &);
   virtual void returnMapCC(const RankTwoTensor &, const RankTwoTensor &, const RankFourTensor &, RankTwoTensor &, RankTwoTensor &, Real &, Real &);
   virtual bool newtonRaphsonJ2(const RankTwoTensor &, const RankTwoTensor &,
-        const RankFourTensor &, RankTwoTensor &, RankTwoTensor &, 
-        Real &, Real &, RankTwoTensor &, RankTwoTensor &, Real);
+        const RankFourTensor &, 
+        RankTwoTensor &, RankTwoTensor &, Real);
 
   void getJacJ2(const RankTwoTensor &, const RankFourTensor &, Real, Real, RankFourTensor &);
   void getJacDP(const RankTwoTensor &, const RankFourTensor &, Real, Real, Real, Real, RankFourTensor &);

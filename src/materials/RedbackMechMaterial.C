@@ -555,15 +555,32 @@ RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTen
     _exponential = std::exp(-_ar[_qp])* std::exp(_ar[_qp]*_delta[_qp] *_T[_qp]/(1 + _delta[_qp] *_T[_qp]));
   }
 
+
   while (err > tol && iterisohard < maxiterisohard) //Hardness update iteration
   {
     iterisohard++;
 
+    Real step_size = 1.0;
+    Real time_simulated = 0.0;
+    Real min_step_size = 1e-8; // TODO: Make accessible to user. 
+
     // TODO: Save variables at beginning of iteration
-    while (!nr_good)
+    //while (time_simulated < 1.0 && step_size > min_step_size)
+    while(!nr_good)
     {
     // Call Newton-Raphson iteration
-    nr_good = newtonRaphsonJ2(sig_old, delta_d, E_ijkl, dp, sig, p_y, q_y, delta_dp, sig_new, yield_stress);
+    nr_good = newtonRaphsonJ2(sig_old, delta_d, E_ijkl, delta_dp, sig_new, yield_stress);
+
+    /*
+    if (nr_good)
+    {
+        time_simulated += step_size;
+    }
+    else
+    {
+        step_size *= 0.1;
+    }
+    */
     }
     
     dpn = dp + delta_dp;
@@ -586,8 +603,7 @@ RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTen
 
 bool
 RedbackMechMaterial::newtonRaphsonJ2(const RankTwoTensor & sig_old, const RankTwoTensor & delta_d,
-        const RankFourTensor & E_ijkl, RankTwoTensor & dp, RankTwoTensor & sig, 
-        Real & p_y, Real & q_y, RankTwoTensor & delta_dp, RankTwoTensor & sig_new,
+        const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & sig_new,
         Real yield_stress)
 {
   RankTwoTensor flow_tensor;

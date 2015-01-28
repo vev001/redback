@@ -523,18 +523,16 @@ RedbackMechMaterial::returnMapElasticity(const RankTwoTensor & sig_old, const Ra
 void
 RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTensor & delta_d, const RankFourTensor & E_ijkl, RankTwoTensor & dp, RankTwoTensor & sig, Real & p_y, Real & q_y)
 {
-  RankTwoTensor sig_new, delta_dp, dpn;
-  RankTwoTensor flow_tensor;
-  RankTwoTensor resid,ddsig;
-  RankFourTensor dr_dsig, dr_dsig_inv;
-  Real flow_incr_dev;
-  Real err1, err3, tol1, tol3;
-  unsigned int iterisohard, iter, maxiterisohard = 20, maxiter = 50;
+  RankTwoTensor sig_new, delta_dp, dpn; // TODO: Is delta_d the elastic strain increment?
+  RankTwoTensor resid;
+  RankFourTensor dr_dsig;
+  Real err, tol;
+  unsigned int iterisohard, maxiterisohard = 20;
   Real eqvpstrain;
   Real yield_stress, yield_stress_prev;
+  bool nr_good = false; // Indicator of convergence of Newton-Raphson
 
-  tol1 = 1e-15; // TODO: expose to user interface and/or make the tolerance relative
-  tol3 = 1e-10; // TODO: expose to user interface and/or make the tolerance relative
+  tol = 1e-10; // TODO: expose to user interface and/or make the tolerance relative
 
   iterisohard = 0;
   eqvpstrain = std::pow(2.0/3.0,0.5) * dp.L2norm();
@@ -549,7 +547,7 @@ RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTen
     return; // in this case we are in elasticity. dp is left unchanged
   }*/
 
-  err3 = 1.1 * tol3;
+  err = 1.1 * tol;
 
   _exponential = 1;
   if (_has_T)
@@ -557,56 +555,24 @@ RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTen
     _exponential = std::exp(-_ar[_qp])* std::exp(_ar[_qp]*_delta[_qp] *_T[_qp]/(1 + _delta[_qp] *_T[_qp]));
   }
 
-  while (err3 > tol3 && iterisohard < maxiterisohard) //Hardness update iteration
+  while (err > tol && iterisohard < maxiterisohard) //Hardness update iteration
   {
     iterisohard++;
-    iter = 0;
-    delta_dp.zero();
 
-    sig_new = sig_old + E_ijkl * delta_d;
-
-    flow_incr_dev = getFlowIncrementJ2(sig_new, yield_stress);
-    getFlowTensorJ2(sig_new, yield_stress, flow_tensor); // flow increment and flow direction combined
-    flow_tensor *= flow_incr_dev;
-
-    resid = flow_tensor - delta_dp;
-
-    err1 = resid.L2norm();
-
-    while (err1 > tol1  && iter < maxiter) //Stress update iteration (hardness fixed)
+    // TODO: Save variables at beginning of iteration
+    while (!nr_good)
     {
-      iter++;
-
-      getJacJ2(sig_new, E_ijkl, flow_incr_dev, yield_stress, dr_dsig); //Jacobian = d(residual)/d(sigma)
-
-      dr_dsig_inv = dr_dsig.invSymm();
-
-      ddsig = -dr_dsig_inv * resid; // Newton Raphson
-
-      sig_new += ddsig; //Update stress
-      delta_dp -= E_ijkl.invSymm() * ddsig; //Update increment of plastic rate of deformation tensor
-
-      flow_incr_dev = getFlowIncrementJ2(sig_new, yield_stress);
-      if (flow_incr_dev < 0.0) //negative flow increment not allowed
-        mooseError("Constitutive Error-Negative flow increment: Reduce time increment.");
-      //TODO: check if we need to update the flow tensor
-      getFlowTensorJ2(sig_new, yield_stress, flow_tensor); // flow increment and flow direction combined
-      flow_tensor *= flow_incr_dev;
-
-      resid = flow_tensor - delta_dp; //Residual
-      err1=resid.L2norm();
+    // Call Newton-Raphson iteration
+    nr_good = newtonRaphsonJ2(sig_old, delta_d, E_ijkl, dp, sig, p_y, q_y, delta_dp, sig_new, yield_stress);
     }
-
-    if (iter>=maxiter)//Convergence failure
-      mooseError("Constitutive Error-Too many iterations: Reduce time increment.\n"); //Convergence failure //TODO: check the adaptive time stepping
-
+    
     dpn = dp + delta_dp;
     eqvpstrain = std::pow(2.0/3.0, 0.5) * dpn.L2norm();
 
     yield_stress_prev = yield_stress;
     yield_stress = getYieldStress(eqvpstrain);
 
-    err3 = std::abs(yield_stress-yield_stress_prev);
+    err = std::abs(yield_stress-yield_stress_prev);
   }
 
   if (iterisohard>=maxiterisohard)
@@ -616,6 +582,59 @@ RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTen
   sig = sig_new;
   q_y = yield_stress;
   p_y = sig.trace()/3.0;
+}
+
+bool
+RedbackMechMaterial::newtonRaphsonJ2(const RankTwoTensor & sig_old, const RankTwoTensor & delta_d,
+        const RankFourTensor & E_ijkl, RankTwoTensor & dp, RankTwoTensor & sig, 
+        Real & p_y, Real & q_y, RankTwoTensor & delta_dp, RankTwoTensor & sig_new,
+        Real yield_stress)
+{
+  RankTwoTensor flow_tensor;
+  RankTwoTensor resid; 
+  RankTwoTensor ddsig;
+  RankFourTensor dr_dsig;
+  RankFourTensor dr_dsig_inv;
+  Real flow_incr_dev;
+  Real err;
+  unsigned int iter;
+  Real tol = 1e-15;// TODO: expose to user interface and/or make the tolerance relative
+  unsigned int maxiter = 50;
+
+  delta_dp.zero();
+  sig_new = sig_old + E_ijkl * delta_d;
+  flow_incr_dev = getFlowIncrementJ2(sig_new, yield_stress);
+  getFlowTensorJ2(sig_new, yield_stress, flow_tensor); // flow increment and flow direction combined
+  flow_tensor *= flow_incr_dev;
+  resid = flow_tensor - delta_dp;
+  err = resid.L2norm();
+  iter = 0;
+
+  // Newton-Raphson iteration
+  while (err > tol  && iter < maxiter) //Stress update iteration (hardness fixed)
+  {
+    iter++;
+
+    getJacJ2(sig_new, E_ijkl, flow_incr_dev, yield_stress, dr_dsig); //Jacobian = d(residual)/d(sigma)
+    dr_dsig_inv = dr_dsig.invSymm();
+    ddsig = -dr_dsig_inv * resid; // Newton Raphson
+    sig_new += ddsig; // Update stress
+    delta_dp -= E_ijkl.invSymm() * ddsig; // Update increment of plastic rate of deformation tensor
+    flow_incr_dev = getFlowIncrementJ2(sig_new, yield_stress);
+    if (flow_incr_dev < 0.0) // Negative flow increment not allowed
+        return false;
+
+    //TODO: check if we need to update the flow tensor
+    getFlowTensorJ2(sig_new, yield_stress, flow_tensor); // flow increment and flow direction combined
+    flow_tensor *= flow_incr_dev;
+    resid = flow_tensor - delta_dp; // Residual
+    err=resid.L2norm();
+  }
+
+  if (iter>=maxiter) // Convergence failure
+      return false;
+  else
+      return true;
 }
 
 /**

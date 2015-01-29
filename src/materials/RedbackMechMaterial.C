@@ -556,6 +556,10 @@ RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTen
   }
 
 
+  dpn = dp;
+  // Save variables at beginning of iteration
+  RankTwoTensor sig_good = sig_old;
+  RankTwoTensor delta_d_trial = delta_d;
   while (err > tol && iterisohard < maxiterisohard) //Hardness update iteration
   {
     iterisohard++;
@@ -564,26 +568,27 @@ RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTen
     Real time_simulated = 0.0;
     Real min_step_size = 1e-8; // TODO: Make accessible to user. 
 
-    // TODO: Save variables at beginning of iteration
-    //while (time_simulated < 1.0 && step_size > min_step_size)
-    while(!nr_good)
+    while (time_simulated < 1.0 && step_size > min_step_size)
+    //while(!nr_good)
     {
     // Call Newton-Raphson iteration
-    nr_good = newtonRaphsonJ2(sig_old, delta_d, E_ijkl, delta_dp, sig_new, yield_stress);
+      nr_good = newtonRaphsonJ2(sig_good, delta_d_trial, E_ijkl, // Inputs
+              delta_dp, sig_new, yield_stress); // Outputs
 
-    /*
-    if (nr_good)
-    {
-        time_simulated += step_size;
-    }
-    else
-    {
-        step_size *= 0.1;
-    }
-    */
+      if (nr_good)
+      {
+          time_simulated += step_size;
+          sig_good = sig_new;
+          dpn += delta_dp;
+          // TODO: Increase step size
+      }
+      else
+      {
+          step_size *= 0.1;
+          delta_d_trial = step_size * delta_d;
+      }
     }
     
-    dpn = dp + delta_dp;
     eqvpstrain = std::pow(2.0/3.0, 0.5) * dpn.L2norm();
 
     yield_stress_prev = yield_stress;
@@ -617,7 +622,7 @@ RedbackMechMaterial::newtonRaphsonJ2(const RankTwoTensor & sig_old, const RankTw
   Real tol = 1e-15;// TODO: expose to user interface and/or make the tolerance relative
   unsigned int maxiter = 50;
 
-  delta_dp.zero();
+  delta_dp.zero(); // Is that the plastic strain increment?
   sig_new = sig_old + E_ijkl * delta_d;
   flow_incr_dev = getFlowIncrementJ2(sig_new, yield_stress);
   getFlowTensorJ2(sig_new, yield_stress, flow_tensor); // flow increment and flow direction combined

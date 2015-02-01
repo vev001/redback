@@ -175,7 +175,8 @@ protected:
   MaterialProperty<Real> & _delta;
   MaterialProperty<Real> & _mod_gruntfest_number;
   MaterialProperty<Real> & _solid_thermal_expansion;
-
+  // Number of iterations in adaptive time step at each quadrature point
+  MaterialProperty<Real> & _return_map_iter;
 
   virtual void computeRedbackTerms(RankTwoTensor &, Real, Real);
 };

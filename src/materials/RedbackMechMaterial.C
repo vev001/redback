@@ -138,7 +138,8 @@ RedbackMechMaterial::RedbackMechMaterial(const std::string & name, InputParamete
   _mechanical_dissipation_jac(getMaterialProperty<Real>("mechanical_dissipation_jacobian")),
   _delta(getMaterialProperty<Real>("delta")),
   _mod_gruntfest_number(getMaterialProperty<Real>("mod_gruntfest_number")),
-  _solid_thermal_expansion(getMaterialProperty<Real>("solid_thermal_expansion"))
+  _solid_thermal_expansion(getMaterialProperty<Real>("solid_thermal_expansion")),
+  _return_map_iter(declareProperty<Real>("return_map_iter"))
 
   {
   _Cijkl.fillFromInputVector(_Cijkl_vector, _fill_method);
@@ -171,6 +172,7 @@ RedbackMechMaterial::initQpStatefulProperties()
   _volumetric_strain[_qp] = 0;
   _volumetric_strain_rate[_qp] = 0;
   _mixture_compressibility[_qp] = _mixture_compressibility_param;
+  _return_map_iter[_qp] = 0;
 
   // TODO: deal with sign of _slope_yield_surface properly in DP case
   switch (_yield_criterion)
@@ -586,6 +588,7 @@ RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTen
       {
           step_size *= 0.1;
           delta_d_trial = step_size * delta_d;
+          _return_map_iter[_qp] += 1;
       }
     }
     

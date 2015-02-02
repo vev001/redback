@@ -558,6 +558,7 @@ RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTen
   }
 
 
+  //std::cout << "New QP." << std::endl;
   dpn = dp;
   // Save variables at beginning of iteration
   RankTwoTensor sig_good = sig_old;
@@ -579,16 +580,19 @@ RedbackMechMaterial::returnMapJ2(const RankTwoTensor & sig_old, const RankTwoTen
 
       if (nr_good)
       {
-          time_simulated += step_size;
-          sig_good = sig_new;
-          dpn += delta_dp;
-          // TODO: Increase step size
+        time_simulated += step_size;
+        sig_good = sig_new;
+        dpn += delta_dp;
+        // TODO: Increase step size
       }
       else
       {
-          step_size *= 0.1;
-          delta_d_trial = step_size * delta_d;
-          _return_map_iter[_qp] += 1;
+        std::cout << "Newton Raphson failed." << std::endl;
+        step_size *= 0.1;
+        delta_d_trial = step_size * delta_d;
+        _return_map_iter[_qp] += 1;
+        if (step_size <= min_step_size)
+            mooseError("Step size too small.");
       }
     }
     
@@ -640,7 +644,8 @@ RedbackMechMaterial::newtonRaphsonJ2(const RankTwoTensor & sig_old, const RankTw
     iter++;
 
     getJacJ2(sig_new, E_ijkl, flow_incr_dev, yield_stress, dr_dsig); //Jacobian = d(residual)/d(sigma)
-    dr_dsig_inv = dr_dsig.invSymm();
+
+    dr_dsig_inv = dr_dsig.invSymm(); //TODO: This invesion can fail. Why?
     ddsig = -dr_dsig_inv * resid; // Newton Raphson
     sig_new += ddsig; // Update stress
     delta_dp -= E_ijkl.invSymm() * ddsig; // Update increment of plastic rate of deformation tensor
@@ -1082,6 +1087,10 @@ RedbackMechMaterial::getJacJ2(const RankTwoTensor & sig, const RankFourTensor & 
           dft_dsig(i,j,k,l) = f1 * deltaFunc(i,k) * deltaFunc(j,l) - f2 * deltaFunc(i,j) * deltaFunc(k,l) - f3 * sig_dev(i,j) * sig_dev(k,l); //d_flow_dirn/d_sig - 2nd part
 
   dfd_dsig = dft_dsig; //d_flow_dirn/d_sig
+  // TODO: dresid_dsig can be very larger (1e80) which is a result of high load
+  // levels and low temperatures. In this case the inversion of dresid_dsig
+  // fails and the simulations aborts. In that case an approapriate warning
+  // should be issued.
   dresid_dsig = E_ijkl.invSymm() + dfd_dsig * flow_incr_dev + dfi_dsig; //Jacobian
 }
 
